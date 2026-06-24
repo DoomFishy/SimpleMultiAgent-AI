@@ -8,34 +8,32 @@ class RagDatabase:
 
     def __init__(self):
         self.client = chromadb.PersistentClient(path="./chroma_db")
-        self.collection = None
+        self.collection = self.client.get_or_create_collection("rag_data")
 
-    def storeChunks(self, chunks: str, embeddings: str):
-        if self.collection == None:
-            self.collection = self.client.get_or_create_collection("rag_data")
 
+    def storeRagChunks(self, chunks, embeddings):
         ids = [str(uuid.uuid4()) for _ in range(len(chunks))]
 
         self.collection.add(
-            ids=[ids],
-            documents=[chunks],
-            embeddings=embeddings,
+            ids=ids,
+            documents=chunks,
+            embeddings=embeddings
         )
 
-    def loadChunks(self):
-        try:
-            if self.collection == None:
-                self.collection = self.client.get_or_create_collection("rag_data")
+        #print(f"Added IDS: {ids} \n DOC: {chunks} \n Embed: {embeddings}")
 
-            results = self.collection.get()
+    def loadRagChunks(self):
+        try:
+
+            results = self.collection.get(include=["documents", "embeddings"])
 
             chunks = results.get("documents", [])
             embeddings = results.get("embeddings", [])
-
+         
             if embeddings is None:
                 embeddings = []
 
-            if chunks is None:
+            if not chunks:
                 return None, None
 
             return chunks, embeddings
@@ -44,5 +42,17 @@ class RagDatabase:
             print(f"Error loading from ChromaDB: {e}")
             return None, None
 
-
+    def checkNewChunk(self, chunks):
+        collection = self.client.get_collection("rag_data")
+        
+        results = collection.get()
+        existing_chunks = results.get("documents", [])
+        
+        for new_chunk in chunks:
+            if new_chunk in existing_chunks:
+                print("FALSE! Duplicate found!")
+                return False
+        
+        print("TRUE! No duplicates found!")
+        return True
     

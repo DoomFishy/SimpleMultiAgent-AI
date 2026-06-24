@@ -3,7 +3,7 @@ import sys, math, json
 from pypdf import PdfReader
 import ollama
 
-class Rag:
+class RagAI:
 
     document = ""
     size = 1
@@ -24,31 +24,12 @@ class Rag:
     def saveChunkEmbeddings(self, chunks, embeddings, filename="embeddings_cache.json"):
         
         self.database.storeRagChunks(chunks, embeddings)
-        
-        """
-        data = {
-            "chunks": chunks,
-            "embeddings": embeddings
-        }
-
-        with open(filename, "w") as f:
-            json.dump(data, f, indent=4)
-        """
 
     def loadChunkEmbeddings(self, filename="embeddings_cache.json"):
 
         return self.database.loadRagChunks()
 
-        """
-        try:
-            with open(filename, "r") as f:
-                data = json.load(f)
-                return data["chunks"], data["embeddings"]
-        except:
-            return None, None
-        """
-
-    def extractTextFromPdf(pdf):
+    def extractTextFromPdf(self, pdf):
         reader = PdfReader(pdf)
         full_text = []
         for page in reader.pages:
@@ -56,17 +37,21 @@ class Rag:
 
         return " ".join(full_text)
 
-    def extractTextToChunk(text, chunk_size, overlap):
-            
+    def extractTextToChunk(self, text, chunk_size, overlap):
+        size = chunk_size
         words = text.split()
-        words_per_chunk = len(words) // chunk_size
+
+        if len(words) < size:
+            size = len(words)
+
+        words_per_chunk = len(words) // size
 
         chunk_arr = []
         min_range = 0
         max_range = words_per_chunk
         overlap_words = int(words_per_chunk * overlap)
 
-        for i in range(0, chunk_size):
+        for i in range(0, size):
             joinedWords = " ".join(words[min_range:max_range])
 
             chunk_arr.append(joinedWords)
@@ -104,7 +89,7 @@ class Rag:
 
         return top_indices[0:top_n]
 
-    def createChunkEmbedding(chunk_array):
+    def createChunkEmbedding(self, chunk_array):
         chunk_embedding = ollama.embed(
             model="nomic-embed-text",
             input=chunk_array
@@ -127,13 +112,16 @@ class Rag:
         return top_index
 
     def chat(self):
-        chunks, chunk_embedding = self.loadChunkEmbeddings()
-        
-        if chunks is None or chunk_embedding is None:
-            text_string = self.extractTextFromPdf(self.document)
-            chunks = self.extractTextToChunk(text_string, 5)
+        text_string = self.extractTextFromPdf(self.document)
+        chunks = self.extractTextToChunk(text_string, self.size, self.overlap)
+
+        if self.database.checkNewChunk(chunks):
+
             chunk_embedding = self.createChunkEmbedding(chunks)
             self.saveChunkEmbeddings(chunks, chunk_embedding)
+        
+        chunks, chunk_embedding = self.loadChunkEmbeddings()
+
 
         messages = []
 
@@ -151,6 +139,7 @@ class Rag:
 
             messages.append({"role": "user", "content": user_question})
 
+        
             top_indices = self.createQuestionEmbedding(user_question, chunk_embedding)    
 
             parts = []
