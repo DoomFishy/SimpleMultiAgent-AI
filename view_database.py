@@ -10,23 +10,21 @@ for i, col in enumerate(collections):
     print(f"{i}. {col.name}")
 
 while True:
-    options = input("Please input database: ")
+    options = input("Please input database or enter delete: ")
     collection = None
 
-    match options:
-        case "0":
-            collection = client.get_collection("web_data")
-            print("---- WEB DATA ----")
+    for i, col in enumerate(collections):
+        if str(i) == options:
+            collection = client.get_collection(col.name)
+            print(f"----[ {col.name} ]----")
 
-        case "1":
-            collection = client.get_collection("qna_cache")
-            print("---- QNA Cache ----")
+    if options == "delete":
+        for col in collections:
+            client.delete_collection(col.name)
 
-        case _:
-            print("Does not match any pattern")
-
-
-
+    if not collection:
+        print("Database not found!")
+        continue
 
     results = collection.get(include=["embeddings", "documents", "metadatas"])
     print("IDs:", results.get("ids", []))
@@ -34,19 +32,3 @@ while True:
     print("Embeddings:", results.get("embeddings", []))
     #print("Metadatas:", results.get("metadatas", []))
     #print("URIs:", results.get("uris", []))
-
-
-"""
-print("---- RAG DATA ----")
-
-# Or get collection names directly
-collection = client.get_collection("rag_data")
-
-results = collection.get()
-# View separately:
-print("IDs:", results.get("ids", []))
-print("Documents:", results.get("documents", []))
-print("Embeddings:", results.get("embeddings", []))
-print("Metadatas:", results.get("metadatas", []))
-print("URIs:", results.get("uris", []))
-"""
