@@ -3,31 +3,25 @@ import sys, math, json
 import requests
 import ollama
 
-class WebAI:
+class WebTool:
     url = "http://localhost:8080/search"
     max_search = 5
 
     size = 5
     overlap = 0.1
 
+    threshold = 0.85
+
     chunks = []
 
-    def __init__(self, url: str, max_search: int, size: int, overlap: float):
+    def __init__(self, url="http://localhost:8080/search", max_search=5, size=5, overlap=0.1, threshold=0.65):
         self.url = url
         self.max_search = max_search
-
         self.size = size
         self.overlap = overlap
+        self.threshold = threshold
 
         self.database = WebDatabase()
-
-    def saveChunkEmbeddings(self, chunks, embeddings,):
-        print("saveChunkEmbeddings: Saving chunk embeddings")
-
-        self.database.storeWebChunks(chunks, embeddings)
-
-    def loadChunkEmbeddings(self, filename="embeddings_cache.json"):
-        return self.database.loadWebChunks()
 
     def extractTextToChunk(self, text, chunk_size, overlap):
         size = chunk_size
@@ -71,26 +65,48 @@ class WebAI:
             similarity = self.consineSimilarity(embed, question_embed[0])
             similarities.append(similarity)
 
-        sorted_similarities = similarities
-        sorted_similarities.sort(reverse=True)
+        top_indices = sorted(
+            range(len(similarities)), 
+            key=lambda i: similarities[i], 
+            reverse=True
+        )[:top_n]
+        
+        return top_indices, similarities
 
-        for i in range(0, len(similarities)):
-            for j in range(0, len(sorted_similarities)):
-                if similarities[i] == sorted_similarities[j]:
-                    top_indices.append(i)
-
-        return top_indices[0:top_n], sorted_similarities
-
-    def nomicEmbed(self, array):
+    def nomicEmbed(self, target):
         try:
             embed = ollama.embed(
                 model="nomic-embed-text",
-                input=array
+                input=target
             )
 
             return embed
         except Exception as e:
             print(f"Unable to nomic embed: {e}")
+
+    def getKeywordsInQuestion(self, user_question):
+        stopwords = {
+            "a", "an", "the", "is", "are", "was", "were", "be", "been", "being",
+            "do", "does", "did", "will", "would", "could", "should", "may", "might",
+            "must", "of", "at", "by", "for", "with", "without", "about", "against",
+            "between", "through", "during", "within", "upon", "towards", "etc",
+            "what", "when", "where", "which", "who", "whom", "whose", "why",
+            "how", "can", "could", "would", "should", "may", "might", "must"
+        }
+
+        words = user_question.lower().split()
+
+        keywords = []
+
+        for word in words:
+            if word not in stopwords:
+                keywords.append(word)
+        
+        return keywords
+
+    def compareQuestionToChunk(self, keywords, chunks):
+        keyword_embeddings = self.nomicEmbed(keywords)
+
 
     def searchWeb(self, question):
         params = {
@@ -117,11 +133,11 @@ class WebAI:
         except requests.exceptions.RequestException as e:
             print(f"Search Failed: {e}")
 
-    def findPastResponse(self, new_question, threshold=0.85):
+    def searchPastResponse(self, new_question, threshold=0.85):
         
-        collection = self.database.collection
+        collection = self.database.client.get_or_create_collection("qna_cache")
         if collection is None:
-            print("No collection found!")
+            print("findPastResponse: Collection is empty!")
             return False
         
         response = ""
@@ -129,10 +145,12 @@ class WebAI:
         document, all_question_embedding = self.database.loadQNACache()
         new_question_embedding = self.nomicEmbed(new_question)["embeddings"]
 
-        top, similarities = self.findTopNSimilarEmbeddings(all_question_embedding, new_question_embedding, 3)
+        top, similarities = self.findTopNSimilarEmbeddings(all_question_embedding, new_question_embedding, 5)
 
         for index in top:
-            if similarities[index] >= threshold:
+            similarity = similarities[index]
+            if similarity >= threshold:
+                print(f"Passed for {index} with {similarity}")
                 response += document[index]
 
         if response != "":
@@ -143,31 +161,102 @@ class WebAI:
         print("findPastResponse: past response cannot be found!")
         return False
 
-    def repeatPastResponse(self, user_question, past_response):
-        try:
-            stream = ollama.chat(
-                model="gemma3",
-                messages=[{"role": "user", "content": f"Using your past response {past_response} answer {user_question}"}],
-                stream=True
-            )
-
-            print("AI: ")
-
-            for chunk in stream:
-                print(chunk["message"]["content"], end="", flush=True)
-            print("\n") 
-        
-        except:
-            print("Error: problem with repeatPastResponse")
-
     def saveWebResponses(self, user_question, response):
-        response_in_chunks = self.extractTextToChunk(response, self.size, self.overlap)
+        response_in_chunks = []
+    
+        if isinstance(response, str):
+            response_in_chunks = self.extractTextToChunk(response, self.size, self.overlap)
+        else:
+            
+
+            for item in response:
+                if isinstance(item, dict):
+                    chunk = item["chunk"]
+                else:
+                    chunk = item
+                response_in_chunks.append(chunk)
+
         question_embedding = self.nomicEmbed(user_question)["embeddings"][0]
         
         duplicated_question_embeddings = [question_embedding] * len(response_in_chunks)
 
-        self.database.storeWebResponse(duplicated_question_embeddings, response_in_chunks)
-        print("Stored!")
+        self.database.storeQNACache(duplicated_question_embeddings, response_in_chunks)
+
+    def searchWebContent(self, user_question, threshold=0.7):
+        chunks, embeddings = self.database.loadWebContent()
+        #question_embeddings = self.nomicEmbed(user_question)["embeddings"]
+
+        keywords = self.getKeywordsInQuestion(user_question)
+        keywords_embeddings = self.nomicEmbed(str(keywords))["embeddings"]
+
+        top_indices, similarities = self.findTopNSimilarEmbeddings(embeddings, keywords_embeddings, top_n=5)
+
+        similar_chunks = []
+
+        for index in top_indices:
+            if similarities[index] >= threshold: #Confident
+                similar_chunks.append({
+                    "chunk": chunks[index],
+                    "similarity": similarities[index],
+                    "confidence": "High"
+                })
+
+        if not len(similar_chunks) == 0:
+            print("searchWebContent: web content found!")
+            return similar_chunks
+        
+        return False
+
+    def convertWebToChunks(self, result):
+        web_content = ""
+
+        for result in result:
+            web_content += (f"Title: {result['title']} Content: {result['content']} URL: {result['url']} \n")
+
+        chunks = self.extractTextToChunk(web_content, self.size, self.overlap)
+
+        return chunks
+        
+    def saveWebContent(self, result):
+        chunks = self.convertWebToChunks(result)
+        embeddings = self.nomicEmbed(chunks)["embeddings"]   
+
+        self.database.storeWebContent(chunks, embeddings)           
+
+    def ask(self, user_question):
+        
+        past_result = self.searchPastResponse(user_question)
+
+        if past_result != False:
+            return past_result
+        
+        web_chunks = self.searchWebContent(user_question)
+
+        if not web_chunks:
+            print("Not Found")
+            result = self.searchWeb(user_question)
+
+            self.saveWebContent(result)
+            result_chunks = self.convertWebToChunks(result)
+            self.saveWebResponses(user_question, result_chunks)
+
+            return result_chunks
+
+        self.saveWebResponses(user_question, web_chunks)
+        return web_chunks
+
+
+
+
+
+
+
+
+
+
+
+
+
 
     def askAI(self, user_question, search_results, total_message):
 
@@ -193,8 +282,8 @@ class WebAI:
         self.saveWebResponses(user_question, full_response)
 
         return full_response
-
-    def chat(self):
+    
+    def solo_chat(self):
         messages = []
 
         print("Chat started! Type 'quit' to exit.\n")
@@ -224,37 +313,3 @@ class WebAI:
                 response = self.askAI(user_question, result, messages)
 
                 messages.append({"role": "assistant", "content": response})
-
-
-        """
-        question_chunk_embedding = self.createChunkEmbedding(chunks)
-        top_indices = self.searchForSimilarChunk(chunk_embedding, question_chunk_embedding, top_n=3)
-        
-        parts = []
-
-        for embed in top_indices:
-            parts.append(chunks[embed])
-
-        joined_top_chunks = " ".join(parts)
-
-        joined_web_results = ""
-
-        urls = []
-
-        for i, result in enumerate(search_results, 1):
-            joined_web_results += 
-            Source {i}:
-            Title: {result['title']}
-            URL: {result['url']}
-            Content: {result['content']}
-           
-
-            urls.append(result['url'])
-
-        combined_text =
-        Retrieved knowledge from your database: {joined_top_chunks}
-        Recent Web result: {joined_web_results}
-        Based on both sources answer the given question {question}
-        if there is conflicting information, prioritize the most recent source
-        
-        """

@@ -3,33 +3,32 @@ import sys, math, json
 from pypdf import PdfReader
 import ollama
 
-class RagAI:
+class RagTool:
 
-    document = ""
-    size = 1
+    size = 5
     overlap = 0.1
+    threshold = 0.5
 
     chunks = []
 
     database = None
 
-    def __init__(self, document: str, size: int, overlap: float):
+    def __init__(self, size=5, overlap=0.1, threshold=0.7):
 
-        self.document = document
         self.size = size
         self.overlap = overlap
+        self.threshold = threshold
         self.database = RagDatabase()
 
-
-    def saveChunkEmbeddings(self, chunks, embeddings, filename="embeddings_cache.json"):
+    def saveChunkEmbeddings(self, chunks, embeddings):
         
         self.database.storeRagChunks(chunks, embeddings)
 
-    def loadChunkEmbeddings(self, filename="embeddings_cache.json"):
+    def loadChunkEmbeddings(self):
 
         return self.database.loadRagChunks()
 
-    def extractTextFromPdf(self, pdf):
+    def extractTextFromPDF(self, pdf):
         reader = PdfReader(pdf)
         full_text = []
         for page in reader.pages:
@@ -42,7 +41,7 @@ class RagAI:
         words = text.split()
 
         if len(words) < size:
-            size = len(words)
+            size = 1
 
         words_per_chunk = len(words) // size
 
@@ -70,7 +69,7 @@ class RagAI:
 
         return dot_product / (magnitude_1 * magnitude_2)
 
-    def searchForSimilarChunk(self, chunk_embed, question_embed, top_n):
+    def findTopNSimilarEmbeddings(self, chunk_embed, question_embed, top_n):
 
         similarities = []
         top_indices = []
@@ -87,41 +86,62 @@ class RagAI:
                 if similarities[i] == sorted_similarities[j]:
                     top_indices.append(i)
 
-        return top_indices[0:top_n]
+        return top_indices[0:top_n], sorted_similarities
 
-    def createChunkEmbedding(self, chunk_array):
-        chunk_embedding = ollama.embed(
+    def nomicEmbed(self, target):
+        embedding = ollama.embed(
             model="nomic-embed-text",
-            input=chunk_array
+            input=target
         )
 
-        all_chunk_embeddings = chunk_embedding["embeddings"]
+        all_embeddings = embedding["embeddings"]
 
-        return all_chunk_embeddings
+        return all_embeddings            
 
-    def createQuestionEmbedding(self, question, chunk_embed):
-        question_embedding = ollama.embed(
-            model="nomic-embed-text",
-            input=question
-        )
+    def readPDF(self, pdf_files):
 
-        all_question_embeddings = question_embedding["embeddings"]
+        for pdf in pdf_files:
 
-        top_index = self.searchForSimilarChunk(chunk_embed, all_question_embeddings, top_n=3)
+            text = self.extractTextFromPDF(pdf)
+            chunks = self.extractTextToChunk(text, self.size, self.overlap)
 
-        return top_index
+            if self.database.checkNewChunk(chunks):
+                chunk_embedding = self.nomicEmbed(chunks)
+                self.saveChunkEmbeddings(chunks, chunk_embedding)
+
+    def ask(self, user_question):
+        
+        chunks, chunk_embeddings = self.loadChunkEmbeddings()
+
+        question_embeddings = self.nomicEmbed(user_question)    
+        top_indices, similarities = self.findTopNSimilarEmbeddings(chunk_embeddings, question_embeddings, top_n=3)        
+
+        similar_chunks = []
+
+        for index in top_indices:
+            if similarities[index] >= self.threshold: #Confident
+                similar_chunks.append({
+                    "chunk": chunks[index],
+                    "similarity": similarities[index],
+                    "confidence": "High"
+                })
+
+            elif similarities[index] >= self.threshold * 0.7: #Unsure
+                similar_chunks.append({
+                    "chunk": chunks[index],
+                    "similarity": similarities[index],
+                    "confidence": "Low"
+                })
+
+        if similar_chunks != None:
+            return similar_chunks
+        
+        return False
 
     def chat(self):
-        text_string = self.extractTextFromPdf(self.document)
-        chunks = self.extractTextToChunk(text_string, self.size, self.overlap)
-
-        if self.database.checkNewChunk(chunks):
-
-            chunk_embedding = self.createChunkEmbedding(chunks)
-            self.saveChunkEmbeddings(chunks, chunk_embedding)
+        self.readPDF(self.pdf_files)
         
-        chunks, chunk_embedding = self.loadChunkEmbeddings()
-
+        chunks, chunk_embeddings = self.loadChunkEmbeddings()
 
         messages = []
 
@@ -140,7 +160,8 @@ class RagAI:
             messages.append({"role": "user", "content": user_question})
 
         
-            top_indices = self.createQuestionEmbedding(user_question, chunk_embedding)    
+            question_embeddings = self.nomicEmbed(user_question, chunk_embeddings)    
+            top_indices, similarities = self.findTopNSimilarEmbeddings(chunk_embeddings, question_embeddings, top_n=3)
 
             parts = []
 

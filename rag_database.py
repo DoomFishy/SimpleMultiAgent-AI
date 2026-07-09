@@ -8,7 +8,7 @@ class RagDatabase:
 
     def __init__(self):
         self.client = chromadb.PersistentClient(path="./chroma_db")
-        self.collection = self.client.get_or_create_collection("rag_data")
+        self.collection = self.client.get_or_create_collection("rag_content")
 
 
     def storeRagChunks(self, chunks, embeddings):
@@ -24,7 +24,6 @@ class RagDatabase:
 
     def loadRagChunks(self):
         try:
-
             results = self.collection.get(include=["documents", "embeddings"])
 
             chunks = results.get("documents", [])
@@ -43,16 +42,14 @@ class RagDatabase:
             return None, None
 
     def checkNewChunk(self, chunks):
-        collection = self.client.get_collection("rag_data")
+        collection = self.client.get_collection("rag_content")
         
         results = collection.get()
         existing_chunks = results.get("documents", [])
         
         for new_chunk in chunks:
             if new_chunk in existing_chunks:
-                print("FALSE! Duplicate found!")
                 return False
         
-        print("TRUE! No duplicates found!")
         return True
     

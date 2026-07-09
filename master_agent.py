@@ -2,8 +2,8 @@ import os
 import numpy as np
 import ollama
 
-from rag_agent import RagAgent
-from web_agent import WebAgent
+from rag_tool import RagTool
+from web_tool import WebTool
 
 class MasterAgent:
     directory_path = ""
@@ -69,8 +69,8 @@ class MasterAgent:
         message = []
         pdf_files = []
 
-        rag_agent = RagAgent()
-        web_agent = WebAgent()
+        rag_agent = RagTool()
+        web_agent = WebTool()
         
         if not self.checkDirectoryValidity(self.directory_path):
             print("Directory is not valid!")
