@@ -78,15 +78,13 @@ class RagTool:
             similarity = self.consineSimilarity(embed, question_embed[0])
             similarities.append(similarity)
 
-        sorted_similarities = similarities
-        sorted_similarities.sort(reverse=True)
+        top_indices = sorted(
+            range(len(similarities)), 
+            key=lambda i: similarities[i], 
+            reverse=True
+        )[:top_n]
 
-        for i in range(0, len(similarities)):
-            for j in range(0, len(sorted_similarities)):
-                if similarities[i] == sorted_similarities[j]:
-                    top_indices.append(i)
-
-        return top_indices[0:top_n], sorted_similarities
+        return top_indices[0:top_n], similarities
 
     def nomicEmbed(self, target):
         embedding = ollama.embed(
@@ -126,65 +124,4 @@ class RagTool:
                     "confidence": "High"
                 })
 
-            elif similarities[index] >= self.threshold * 0.7: #Unsure
-                similar_chunks.append({
-                    "chunk": chunks[index],
-                    "similarity": similarities[index],
-                    "confidence": "Low"
-                })
-
-        if similar_chunks != None:
-            return similar_chunks
-        
-        return False
-
-    def chat(self):
-        self.readPDF(self.pdf_files)
-        
-        chunks, chunk_embeddings = self.loadChunkEmbeddings()
-
-        messages = []
-
-        print("Chat started! Type 'quit' to exit.\n")
-
-        while True:
-
-            user_question = input("User: ")
-            print("\n")
-
-            if user_question.lower() in ["quit", "exit", "q"]:
-                print("Goodbye!")
-                break
-
-
-            messages.append({"role": "user", "content": user_question})
-
-        
-            question_embeddings = self.nomicEmbed(user_question, chunk_embeddings)    
-            top_indices, similarities = self.findTopNSimilarEmbeddings(chunk_embeddings, question_embeddings, top_n=3)
-
-            parts = []
-
-            for embed in top_indices:
-                parts.append(chunks[embed])
-
-            joined_parts = " ".join(parts)
-
-            augmented_question = (f"Using this data: {joined_parts}. Respond to this question: {user_question}")
-
-            responses = ollama.chat(
-                model="gemma3",
-                messages=messages + [{"role": "user", "content": augmented_question}],
-                stream=True
-            )
-
-            print("AI: ")
-
-            full_response = ""
-
-            for chunk in responses:
-                print(chunk["message"]["content"], end="", flush=True)
-                full_response += chunk["message"]["content"]
-            print("\n")
-
-            messages.append({"role": "assistant", "content": full_response})
+        return similar_chunks

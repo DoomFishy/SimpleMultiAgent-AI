@@ -140,7 +140,7 @@ class WebTool:
             print("findPastResponse: Collection is empty!")
             return False
         
-        response = ""
+        similar_chunks = []
 
         document, all_question_embedding = self.database.loadQNACache()
         new_question_embedding = self.nomicEmbed(new_question)["embeddings"]
@@ -150,15 +150,15 @@ class WebTool:
         for index in top:
             similarity = similarities[index]
             if similarity >= threshold:
-                print(f"Passed for {index} with {similarity}")
-                response += document[index]
+                similar_chunks.append({
+                    "chunk": document[index],
+                    "similarity": similarities[index],
+                    "confidence": "High"
+                })
 
-        if response != "":
-            print("findPastResponse: response found!")
-            return response
-
+        if not len(similar_chunks) == 0:
+            return similar_chunks
             
-        print("findPastResponse: past response cannot be found!")
         return False
 
     def saveWebResponses(self, user_question, response):
@@ -167,8 +167,6 @@ class WebTool:
         if isinstance(response, str):
             response_in_chunks = self.extractTextToChunk(response, self.size, self.overlap)
         else:
-            
-
             for item in response:
                 if isinstance(item, dict):
                     chunk = item["chunk"]
@@ -224,7 +222,7 @@ class WebTool:
         self.database.storeWebContent(chunks, embeddings)           
 
     def ask(self, user_question):
-        
+
         past_result = self.searchPastResponse(user_question)
 
         if past_result != False:
@@ -233,7 +231,6 @@ class WebTool:
         web_chunks = self.searchWebContent(user_question)
 
         if not web_chunks:
-            print("Not Found")
             result = self.searchWeb(user_question)
 
             self.saveWebContent(result)
@@ -252,64 +249,3 @@ class WebTool:
 
 
 
-
-
-
-
-
-
-    def askAI(self, user_question, search_results, total_message):
-
-        web_content = ""
-        full_response = ""
-
-        for result in search_results:
-            web_content += (f"Title: {result['title']} Content: {result['content']} URL: {result['url']} \n")
-
-        stream = ollama.chat(
-            model="gemma3",
-            messages=total_message+[{"role": "user", "content": f"Using the search results {web_content} answer the question {user_question}"}],
-            stream=True
-        )
-
-        print("AI: ")
-
-        for chunk in stream:
-            print(chunk["message"]["content"], end="", flush=True)
-            full_response += chunk["message"]["content"]
-        print("\n") 
-
-        self.saveWebResponses(user_question, full_response)
-
-        return full_response
-    
-    def solo_chat(self):
-        messages = []
-
-        print("Chat started! Type 'quit' to exit.\n")
-
-        while True:
-            user_question = input("User: ")
-            print("\n")
-
-            if user_question.lower() in ["quit", "exit", "q"]:
-                print("Goodbye!")
-                break
-
-            response, question_embeddings = self.database.loadQNACache()
-            past_result = self.findPastResponse(user_question)
-
-            if past_result != False:
-                print("Question inputted is a duplicate!")
-                self.repeatPastResponse(user_question, past_result)
-
-            else:
-                print("New question found!")
-
-                result = self.searchWeb(user_question)
-
-                messages.append({"role": "user", "content": user_question})
-
-                response = self.askAI(user_question, result, messages)
-
-                messages.append({"role": "assistant", "content": response})

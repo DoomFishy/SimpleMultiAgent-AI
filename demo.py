@@ -1,3 +1,3 @@
-import rag
+import rag_tool
 
-rag = rag("demo.pdf", 5, 0.1)
+rag_tool = rag_tool("demo.pdf", 5, 0.1)
