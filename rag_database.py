@@ -11,13 +11,18 @@ class RagDatabase:
         self.collection = self.client.get_or_create_collection("rag_content")
 
 
-    def storeRagChunks(self, chunks, embeddings):
+    def storeRagChunks(self, chunks, embeddings, name):
         ids = [str(uuid.uuid4()) for _ in range(len(chunks))]
+
+        metadatas = [{
+            "name": name
+        }]
 
         self.collection.add(
             ids=ids,
             documents=chunks,
-            embeddings=embeddings
+            embeddings=embeddings,
+            metadatas=metadatas
         )
 
         #print(f"Added IDS: {ids} \n DOC: {chunks} \n Embed: {embeddings}")

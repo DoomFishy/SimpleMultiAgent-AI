@@ -78,13 +78,22 @@ class RagTool:
             similarity = self.consineSimilarity(embed, question_embed[0])
             similarities.append(similarity)
 
-        top_indices = sorted(
-            range(len(similarities)), 
-            key=lambda i: similarities[i], 
-            reverse=True
-        )[:top_n]
+        if top_n == 0:
+            top_indices = sorted(
+                range(len(similarities)), 
+                key=lambda i: similarities[i], 
+                reverse=True
+            )
+            return top_indices, similarities
 
-        return top_indices[0:top_n], similarities
+        else:
+            top_indices = sorted(
+                range(len(similarities)), 
+                key=lambda i: similarities[i], 
+                reverse=True
+            )[:top_n]
+
+            return top_indices[0:top_n], similarities
 
     def nomicEmbed(self, target):
         embedding = ollama.embed(
@@ -100,12 +109,22 @@ class RagTool:
 
         for pdf in pdf_files:
 
-            text = self.extractTextFromPDF(pdf)
+            text = self.extractTextFromPDF(pdf["path"])
             chunks = self.extractTextToChunk(text, self.size, self.overlap)
 
             if self.database.checkNewChunk(chunks):
                 chunk_embedding = self.nomicEmbed(chunks)
-                self.saveChunkEmbeddings(chunks, chunk_embedding)
+                self.saveChunkEmbeddings(chunks, chunk_embedding, pdf["name"])
+    
+    def getPDF(self, user_question, pdf_files):
+        pdf_names = [pdf["name"] for pdf in pdf_files]
+        name_embeddings = self.nomicEmbed(pdf_names)
+        question_embeddings = self.nomicEmbed(user_question)
+
+        top_indices, similarities = self.findTopNSimilarEmbeddings(name_embeddings, question_embeddings, top_n=0)        
+
+        for i in pdf_files:
+            print(i["name"])
 
     def ask(self, user_question):
         

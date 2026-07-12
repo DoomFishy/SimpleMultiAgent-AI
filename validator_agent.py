@@ -16,13 +16,13 @@ class ValidatorAgent:
 
     def validate(self):
 
+        if self.web_result == "":
+            return ""
         prompt = f"""
             You are the Quality Control Agent. Your job is to compare the Researcher's draft against the original RAG and Web snippets.
             Step 1: Scan for direct factual conflicts, date mismatches, and source authority gaps.
             Step 2: If NO conflicts exist, respond with: "APPROVED".
             Step 3: If conflicts exist, respond with: "REVISE" and provide a bulleted list of actionable fixes. Do not rewrite it yourself."
-            
-            If the WEB field is empty or contains no relevant information, treat it as "NEUTRAL" - not a conflict. Do not penalize the draft for missing web data.
 
             For each factual claim in the draft, score it from 0-100 based on:
 

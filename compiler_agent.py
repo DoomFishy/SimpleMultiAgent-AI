@@ -5,34 +5,40 @@ import ollama
 class CompilerAgent:
     rag_result = ""
     web_result = ""
+    user_question = ""
 
-    def __init__(self, rag_result, web_result):
+    def __init__(self, user_question, rag_result, web_result):
         self.rag_result = rag_result
         self.web_result = web_result
+        self.user_question
 
-    def compileResult(self, rag_result, web_result):
-        content = ""
+    def compileResult(self, user_question, rag_result, web_result):
+        rag_content = ""
+        web_content = ""
 
         for item in rag_result:
             if isinstance(item, dict):
                 chunk = item["chunk"]
             else:
                 chunk = item
-            content += chunk
+            rag_content += chunk
 
         for item in web_result:
             if isinstance(item, dict):
                 chunk = item["chunk"]
             else:
                 chunk = item
-            content += chunk
+            web_content += chunk
 
         prompt = f"""
-            You are a Compiler Agent. Make a response using the result.
+            You are a Compiler Agent. Make a response using the result and the user question.
 
             Do not output introductionary phrases or conclusionary phrases.
 
-            RESULT: {content}.
+            USER_QUESTION: {user_question}.
+            RAG_RESULT: {rag_content}.
+            WEB_RESULT: {web_content}.
+
         """
 
         responses = ollama.chat(
@@ -49,4 +55,4 @@ class CompilerAgent:
         return response
 
     def run(self):
-        return self.compileResult(self.rag_result, self.web_result)
+        return self.compileResult(self.user_question, self.rag_result, self.web_result)

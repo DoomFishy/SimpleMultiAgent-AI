@@ -40,9 +40,24 @@ class MasterAgent:
         for f in os.listdir(path):
             if f.lower().endswith(".pdf"):
                 pdf_path = f"{path}/{f}"
-                pdf_files.append(pdf_path)
+                pdf_files.append({
+                    "path": pdf_path,
+                    "name": f
+                })
 
         return pdf_files
+
+    def hasTag(self, user_question):
+        words = user_question.lower().split()
+
+        for word in words:
+            start_char = word[0]
+            end_char = word[-1]
+
+            if start_char == "[" and end_char == "]":
+                return True
+
+        return False
 
     def checkNewFilesInDirectory(self, path, pdf_files):
         new_pdf_files = self.getDirectoryFiles(path)
@@ -59,19 +74,20 @@ class MasterAgent:
     def finalize(self, draft, critique, user_question):
 
         prompt = f"""
-            You are a Writer Agent. Your job is to combine both Reseracher's draft while using the Validator's critique to produce a final response.
+            You are a Writer Agent. Your job is to combine both Compiler's draft while using the Validator's critique to produce a final response.
+            Do not output introductionary phrases or conclusionary phrases about the Validator.
 
             1. If Validator says "APPROVED": Output the Researcher's draft EXACTLY as-is. Do not add, remove, or modify anything.
             2. If Validator says "REVISE": Apply the Validator's critique to fix the draft, then output the corrected version.
-                        
+            3. If Validator says "NEUTRAL": Output the Researcher's draft EXACTLY as-is. Do not add, remove, or modify anything.
+
             Determine if the draft ACTUALLY answers the question.
 
             DRAFT: {draft}
             CRITIQUE: {critique}
             QUESTION: {user_question}
             
-            1. If the draft contains NO INFORMATION related to the question, respond with:
-            "I couldn't find any information about {user_question}."
+            1. If the draft contains NO INFORMATION related to the question, ask the user to clarify
 
             2. If the draft contains information but it's clearly irrelevant
             "I couldn't find any information about {user_question}."
@@ -89,20 +105,44 @@ class MasterAgent:
             print(chunk["message"]["content"], end="", flush=True)
         print("\n")
 
+    def findPDFTag(self, user_question):
+
+        if "[pdf]" in user_question:
+            return True
+    
+        return False
+
     def ask(self, user_question, rag_tool, web_tool):
+        rag_result = ""
+        web_result = ""
 
-        rag_result = rag_tool.ask(user_question)
-        web_result = web_tool.ask(user_question)
+        if True:
+            self.findPDFTag(user_question)
+            rag_result = rag_tool.getPDF(user_question, self.getDirectoryFiles(self.directory_path))
+            web_result = ""
+            print("TAG")
+            return
+        else:
+            rag_result = rag_tool.ask(user_question)
+            web_result = web_tool.ask(user_question)
 
-        compiler_agent = CompilerAgent(rag_result, web_result)
+        print(user_question)
+        print(rag_result)
+
+        print("Compiling...")
+        compiler_agent = CompilerAgent(user_question, rag_result, web_result)
         draft = compiler_agent.run()
 
+        print("Validating...")
         validator_agent = ValidatorAgent(draft, rag_result, web_result)
         critique = validator_agent.validate()
 
+        print("Finalizing...")
         self.finalize(draft, critique, user_question)
         
-
+        print(f"Draft: {draft[:1000]}")
+        print("\n")
+        print(f"Critique: {critique[:1000]}")
 
     def chat(self):
         message = []
@@ -115,7 +155,7 @@ class MasterAgent:
             print("Directory is not valid!")
             return
 
-        print("Chat started! Type 'quit' to exit.\n")
+        print("Chat started! Type 'quit' to exit.\n") 
         
         while True:
 
