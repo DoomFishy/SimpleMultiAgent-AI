@@ -30,9 +30,11 @@ class CompilerAgent:
                 chunk = item
             web_content += chunk
 
+        print(rag_content)
+
         prompt = f"""
             You are a Compiler Agent. Make a response using the result based off of the user question.
-
+            If web_result is empty, just use rag_result.
             Do not output introductionary phrases or conclusionary phrases.
 
             USER_QUESTION: {user_question}.

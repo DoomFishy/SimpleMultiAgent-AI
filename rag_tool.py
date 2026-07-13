@@ -138,22 +138,23 @@ class RagTool:
         metadata_names = [meta["name"] for meta in metadatas]
 
         keywords = self.findKeywords(user_question)
-        print(f"keywords: {keywords}")
 
         name_embeddings = self.nomicEmbed(metadata_names)
         question_embeddings = self.nomicEmbed(user_question)
         
         question_top_indices, question_similarities = self.findTopNSimilarEmbeddings(name_embeddings, question_embeddings, top_n=0)
 
+
         correct_pdf = []
+        similarity_max = question_similarities[0]
 
         for index in question_top_indices:
-            if question_similarities[index] >= 0.78: #Confident
+            print(f"{metadata_names[index]} {question_similarities[index]}")
+            if question_similarities[index] >= similarity_max: #Confident
                 correct_pdf.append(chunks[index])
-        
+                similarity_max = question_similarities[index]
 
         return correct_pdf
-
 
     def ask(self, user_question):
         
@@ -173,38 +174,3 @@ class RagTool:
                 })
 
         return similar_chunks
-
-
-"""
-    def getPDF(self, user_question, tag_content, pdf_files):
-        chunks, chunk_embeddings = self.loadChunkEmbeddings()
-
-        metadatas = self.database.loadRagMetadata()
-        metadata_names = [meta["name"] for meta in metadatas]
-
-        name_embeddings = self.nomicEmbed(metadata_names)
-        question_embeddings = self.nomicEmbed(user_question)
-        
-        question_top_indices, question_similarities = self.findTopNSimilarEmbeddings(name_embeddings, question_embeddings, top_n=0)
-        
-        tag_embeddings_array = [self.nomicEmbed(tag) for tag in tag_content]
-
-        tag_top = []
-        
-        for embed in tag_embeddings_array:
-            tag_top_indices, tag_similarities = self.findTopNSimilarEmbeddings(name_embeddings, embed, top_n=0)
-            tag_top.append(tag_top_indices)    
-
-        print(metadata_names)
-        correct_pdf = []
-
-        for index in question_top_indices:
-            print(metadata_names[index])
-            print(question_similarities[index])
-            if question_similarities[index] >= 0.78: #Confident
-                correct_pdf.append(chunks[index])
-        
-        print(correct_pdf)
-
-        return correct_pdf
-"""

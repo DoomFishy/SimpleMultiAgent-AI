@@ -194,6 +194,10 @@ class MasterAgent:
 
         print("Finalizing...")
         self.finalize(draft, critique, user_question)
+        
+        print(f"Draft: {draft[:1000]}")
+        print("\n")
+        print(f"Critique: {critique[:1000]}")
 
     def chat(self):
         message = []
