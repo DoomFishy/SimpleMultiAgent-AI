@@ -39,13 +39,12 @@ class ValidatorAgent:
 
         responses = ollama.chat(
             model="gemma3",
-            messages=[{"role": "user", "content": prompt}],
-            stream=True
+            messages=[{"role": "user", "content": prompt}]
         )
 
-        response = ""
+        responses = ollama.chat(
+            model="gemma3",
+            messages=[{"role": "user", "content": prompt}]
+        )
 
-        for chunk in responses:
-            response += chunk["message"]["content"]
-
-        return response
+        return responses['message']['content']

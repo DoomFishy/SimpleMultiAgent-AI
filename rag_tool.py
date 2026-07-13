@@ -20,12 +20,10 @@ class RagTool:
         self.threshold = threshold
         self.database = RagDatabase()
 
-    def saveChunkEmbeddings(self, chunks, embeddings):
-        
-        self.database.storeRagChunks(chunks, embeddings)
+    def saveChunkEmbeddings(self, chunks, embeddings, name):
+        self.database.storeRagChunks(chunks, embeddings, name)
 
     def loadChunkEmbeddings(self):
-
         return self.database.loadRagChunks()
 
     def extractTextFromPDF(self, pdf):
@@ -77,25 +75,22 @@ class RagTool:
         for embed in chunk_embed:
             similarity = self.consineSimilarity(embed, question_embed[0])
             similarities.append(similarity)
-
+        
+        top_indices = sorted(
+            range(len(similarities)), 
+            key=lambda i: similarities[i], 
+            reverse=True
+        )
+        
         if top_n == 0:
-            top_indices = sorted(
-                range(len(similarities)), 
-                key=lambda i: similarities[i], 
-                reverse=True
-            )
             return top_indices, similarities
-
         else:
-            top_indices = sorted(
-                range(len(similarities)), 
-                key=lambda i: similarities[i], 
-                reverse=True
-            )[:top_n]
-
             return top_indices[0:top_n], similarities
 
     def nomicEmbed(self, target):
+        if isinstance(target, str):
+            target = [target]
+            
         embedding = ollama.embed(
             model="nomic-embed-text",
             input=target
@@ -103,7 +98,27 @@ class RagTool:
 
         all_embeddings = embedding["embeddings"]
 
-        return all_embeddings            
+        return all_embeddings          
+      
+    def findKeywords(self, user_question):
+        stopwords = {
+            "a", "an", "the", "is", "are", "was", "were", "be", "been", "being",
+            "do", "does", "did", "will", "would", "could", "should", "may", "might",
+            "must", "of", "at", "by", "for", "with", "without", "about", "against",
+            "between", "through", "during", "within", "upon", "towards", "etc",
+            "what", "when", "where", "which", "who", "whom", "whose", "why",
+            "how", "can", "could", "would", "should", "may", "might", "must"
+        }
+
+        words = user_question.lower().split()
+
+        keywords = []
+
+        for word in words:
+            if word not in stopwords:
+                keywords.append(word)
+        
+        return keywords
 
     def readPDF(self, pdf_files):
 
@@ -115,16 +130,30 @@ class RagTool:
             if self.database.checkNewChunk(chunks):
                 chunk_embedding = self.nomicEmbed(chunks)
                 self.saveChunkEmbeddings(chunks, chunk_embedding, pdf["name"])
-    
-    def getPDF(self, user_question, pdf_files):
-        pdf_names = [pdf["name"] for pdf in pdf_files]
-        name_embeddings = self.nomicEmbed(pdf_names)
+
+    def getPDF(self, user_question):
+        chunks, chunk_embeddings = self.loadChunkEmbeddings()
+
+        metadatas = self.database.loadRagMetadata()
+        metadata_names = [meta["name"] for meta in metadatas]
+
+        keywords = self.findKeywords(user_question)
+        print(f"keywords: {keywords}")
+
+        name_embeddings = self.nomicEmbed(metadata_names)
         question_embeddings = self.nomicEmbed(user_question)
+        
+        question_top_indices, question_similarities = self.findTopNSimilarEmbeddings(name_embeddings, question_embeddings, top_n=0)
 
-        top_indices, similarities = self.findTopNSimilarEmbeddings(name_embeddings, question_embeddings, top_n=0)        
+        correct_pdf = []
 
-        for i in pdf_files:
-            print(i["name"])
+        for index in question_top_indices:
+            if question_similarities[index] >= 0.78: #Confident
+                correct_pdf.append(chunks[index])
+        
+
+        return correct_pdf
+
 
     def ask(self, user_question):
         
@@ -144,3 +173,38 @@ class RagTool:
                 })
 
         return similar_chunks
+
+
+"""
+    def getPDF(self, user_question, tag_content, pdf_files):
+        chunks, chunk_embeddings = self.loadChunkEmbeddings()
+
+        metadatas = self.database.loadRagMetadata()
+        metadata_names = [meta["name"] for meta in metadatas]
+
+        name_embeddings = self.nomicEmbed(metadata_names)
+        question_embeddings = self.nomicEmbed(user_question)
+        
+        question_top_indices, question_similarities = self.findTopNSimilarEmbeddings(name_embeddings, question_embeddings, top_n=0)
+        
+        tag_embeddings_array = [self.nomicEmbed(tag) for tag in tag_content]
+
+        tag_top = []
+        
+        for embed in tag_embeddings_array:
+            tag_top_indices, tag_similarities = self.findTopNSimilarEmbeddings(name_embeddings, embed, top_n=0)
+            tag_top.append(tag_top_indices)    
+
+        print(metadata_names)
+        correct_pdf = []
+
+        for index in question_top_indices:
+            print(metadata_names[index])
+            print(question_similarities[index])
+            if question_similarities[index] >= 0.78: #Confident
+                correct_pdf.append(chunks[index])
+        
+        print(correct_pdf)
+
+        return correct_pdf
+"""

@@ -13,10 +13,7 @@ class RagDatabase:
 
     def storeRagChunks(self, chunks, embeddings, name):
         ids = [str(uuid.uuid4()) for _ in range(len(chunks))]
-
-        metadatas = [{
-            "name": name
-        }]
+        metadatas = [{"name": name}] * len(chunks)
 
         self.collection.add(
             ids=ids,
@@ -45,6 +42,21 @@ class RagDatabase:
         except Exception as e:
             print(f"Error loading from ChromaDB: {e}")
             return None, None
+
+    def loadRagMetadata(self):
+        try:
+            results = self.collection.get(include=["metadatas"])
+
+            metadata = results.get("metadatas", [])
+         
+            if not metadata:
+                return None
+
+            return metadata
+
+        except Exception as e:
+            print(f"Error loading from ChromaDB: {e}")
+            return None, None        
 
     def checkNewChunk(self, chunks):
         collection = self.client.get_collection("rag_content")

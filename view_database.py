@@ -30,5 +30,5 @@ while True:
     print("IDs:", results.get("ids", []))
     print("Documents:", results.get("documents", []))
     print("Embeddings:", results.get("embeddings", []))
-    #print("Metadatas:", results.get("metadatas", []))
+    print("Metadatas:", results.get("metadatas", []))
     #print("URIs:", results.get("uris", []))

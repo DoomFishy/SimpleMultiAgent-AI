@@ -59,6 +59,16 @@ class MasterAgent:
 
         return False
 
+    def findTag(self, user_question):
+        start = user_question.find("[")
+        end = user_question.find("]")
+
+        pdf_names_string = user_question[start + 1:end]
+
+        pdf_names_array = pdf_names_string.split(",")
+    
+        return pdf_names_array
+
     def checkNewFilesInDirectory(self, path, pdf_files):
         new_pdf_files = self.getDirectoryFiles(path)
 
@@ -77,6 +87,7 @@ class MasterAgent:
             You are a Writer Agent. Your job is to combine both Compiler's draft while using the Validator's critique to produce a final response.
             Do not output introductionary phrases or conclusionary phrases about the Validator.
 
+            If Critique is empty then ignore the critique.
             1. If Validator says "APPROVED": Output the Researcher's draft EXACTLY as-is. Do not add, remove, or modify anything.
             2. If Validator says "REVISE": Apply the Validator's critique to fix the draft, then output the corrected version.
             3. If Validator says "NEUTRAL": Output the Researcher's draft EXACTLY as-is. Do not add, remove, or modify anything.
@@ -105,29 +116,73 @@ class MasterAgent:
             print(chunk["message"]["content"], end="", flush=True)
         print("\n")
 
-    def findPDFTag(self, user_question):
+    def findIntent(self, user_question):
+        keywords = [
+            "summarize", "summarise", "summary", "summarization", "summarisation",
+            "overview", "recap", "synopsis", "abstract", "digest", "condense", 
+            "abridge", "abbreviated", "compressed", "notes",
 
-        if "[pdf]" in user_question:
-            return True
-    
-        return False
+            "keypoints", "key points", "key takeaways", "key takeaway",
+            "main points", "main ideas", "main takeaways", "main takeaway",
+            "important points", "important ideas", "highlights", "bullet points",
+            "core ideas", "essential points", "major points", "critical points",
+            
+            "outline", "structure", "breakdown", "sections", "chapters",
+            "table of contents", "contents", "index",
+            
+            "brief", "short", "shorten", "shortened", "shorter version",
+            "quick", "quick version", "fast", "rapid",
+            "tl;dr", "tldr", "tldr", "too long didn't read",
+            
+            "executive summary", "management summary", "high-level",
+            "high level", "bird's eye view", "birds eye view",
+            "big picture", "helicopter view", "30,000 foot", "thirty thousand foot",
+            
+            "gist", "essence", "core", "crux", "heart", "substance",
+            "nub", "meat", "nutshell", "in a nutshell",
+            
+            "recap", "review", "wrap-up", "wrap up", "roundup", "round-up",
+            "retrospective", "postmortem", "debrief", "debriefing",
+            
+            "explain", "explanation", "describe", "description",
+            "tell me about", "what's in", "what is in",
+            "what does it say", "what does this say",
+            "what's the story", "what is the story",
+        ]
+        
+        prompt = f"""
+            Your job is to determine how the system should retrieve content to answer the user's question.
+            Classify the question into ONE of these categories:
+
+
+            1. "full_document" - The user wants an OVERVIEW, SUMMARY, or GENERAL UNDERSTANDING of the ENTIRE document.
+
+            2. "specific_parts" - The user wants a SPECIFIC FACT, DETAIL, or ANSWER that exists in ONE part of the document.
+
+            User question: {user_question}
+
+            Output ONLY: "full_document" or "specific_parts"
+        """
+
+        responses = ollama.chat(
+            model="gemma3",
+            messages=[{"role": "user", "content": prompt}]
+        )
+
+        return responses['message']['content']
 
     def ask(self, user_question, rag_tool, web_tool):
         rag_result = ""
         web_result = ""
 
-        if True:
-            self.findPDFTag(user_question)
-            rag_result = rag_tool.getPDF(user_question, self.getDirectoryFiles(self.directory_path))
+        user_intent = self.findIntent(user_question).strip()
+
+        if user_intent == "full_document":
+            rag_result = rag_tool.getPDF(user_question)
             web_result = ""
-            print("TAG")
-            return
         else:
             rag_result = rag_tool.ask(user_question)
             web_result = web_tool.ask(user_question)
-
-        print(user_question)
-        print(rag_result)
 
         print("Compiling...")
         compiler_agent = CompilerAgent(user_question, rag_result, web_result)

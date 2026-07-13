@@ -31,7 +31,7 @@ class CompilerAgent:
             web_content += chunk
 
         prompt = f"""
-            You are a Compiler Agent. Make a response using the result and the user question.
+            You are a Compiler Agent. Make a response using the result based off of the user question.
 
             Do not output introductionary phrases or conclusionary phrases.
 
@@ -43,16 +43,15 @@ class CompilerAgent:
 
         responses = ollama.chat(
             model="gemma3",
-            messages=[{"role": "user", "content": prompt}],
-            stream=True
+            messages=[{"role": "user", "content": prompt}]
         )
 
-        response = ""
+        responses = ollama.chat(
+            model="gemma3",
+            messages=[{"role": "user", "content": prompt}]
+        )
 
-        for chunk in responses:
-            response += chunk["message"]["content"]
-
-        return response
+        return responses['message']['content']
 
     def run(self):
         return self.compileResult(self.user_question, self.rag_result, self.web_result)
